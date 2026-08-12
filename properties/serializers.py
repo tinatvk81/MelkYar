@@ -1,6 +1,8 @@
 from rest_framework import serializers
+from django.db import transaction
 
 from .models import (
+    Amenity,
     ImageAsset,
     MortgageDetail,
     PresaleDetail,
@@ -8,6 +10,7 @@ from .models import (
     RentDetail,
     SaleDetail,
 )
+
 
 
 class ImageAssetSerializer(serializers.ModelSerializer):
@@ -51,6 +54,12 @@ DETAIL_SERIALIZER_MAP = {
     Property.TransactionType.MORTGAGE: ("mortgage_detail", MortgageDetailSerializer),
 }
 
+class AmenitySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Amenity
+        fields = ("id", "name")
+        read_only_fields = ("id",)
+
 
 class PropertySerializer(serializers.ModelSerializer):
     """
@@ -63,6 +72,16 @@ class PropertySerializer(serializers.ModelSerializer):
     detail_data = serializers.SerializerMethodField(read_only=True)
     owner_agent_name = serializers.CharField(source="owner_agent.get_full_name", read_only=True)
     images = ImageAssetSerializer(many=True, read_only=True)
+    property_amenities = AmenitySerializer(many=True, read_only=True)
+
+    amenity_ids = serializers.PrimaryKeyRelatedField(
+        source="property_amenities",
+        queryset=Amenity.objects.all(),
+        many=True,
+        write_only=True,
+        required=False,
+    )
+
 
     class Meta:
         model = Property
@@ -79,6 +98,8 @@ class PropertySerializer(serializers.ModelSerializer):
             "owner_agent", "owner_agent_name", "images",
             "created_at", "updated_at",
             "detail", "detail_data",
+            "property_amenities","amenity_ids",
+
         ]
         read_only_fields = ["owner_agent", "created_at", "updated_at", "renewal_priority_flag"]
 
@@ -90,37 +111,90 @@ class PropertySerializer(serializers.ModelSerializer):
         return serializer_cls(detail_obj).data
 
     def validate(self, attrs):
-        transaction_type = attrs.get("transaction_type") or getattr(self.instance, "transaction_type", None)
-        if transaction_type not in DETAIL_SERIALIZER_MAP:
-            raise serializers.ValidationError({"transaction_type": "نوع معامله نامعتبر است."})
+        # بررسی تغییر نوع معامله در زمان آپدیت
+        incoming_type = attrs.get("transaction_type")
+        if (
+            self.instance is not None 
+            and incoming_type is not None 
+            and incoming_type != self.instance.transaction_type
+        ):
+            raise serializers.ValidationError(
+                {"transaction_type": "تغییر نوع معامله پس از ثبت فایل مجاز نیست."}
+            )
+
+        # سایر بررسی‌ها (اگر وجود دارد)
         return attrs
+
 
     def create(self, validated_data):
         detail_payload = validated_data.pop("detail")
         request = self.context["request"]
+
         validated_data["owner_agent"] = request.user
 
-        rel_name, serializer_cls = DETAIL_SERIALIZER_MAP[validated_data["transaction_type"]]
+        rel_name, serializer_cls = DETAIL_SERIALIZER_MAP[
+            validated_data["transaction_type"]
+        ]
+
         detail_serializer = serializer_cls(data=detail_payload)
         detail_serializer.is_valid(raise_exception=True)
 
-        property_obj = Property.objects.create(**validated_data)
-        detail_serializer.save(property=property_obj)
+        amenities = validated_data.pop("property_amenities", [])
+
+        with transaction.atomic():
+
+            property_obj = Property.objects.create(**validated_data)
+            property_obj.property_amenities.set(amenities)
+
+            detail_serializer.save(property=property_obj)
+
         return property_obj
 
     def update(self, instance, validated_data):
         detail_payload = validated_data.pop("detail", None)
-        for attr, value in validated_data.items():
-            setattr(instance, attr, value)
-        instance.save()
 
-        if detail_payload is not None:
-            rel_name, serializer_cls = DETAIL_SERIALIZER_MAP[instance.transaction_type]
-            detail_obj = getattr(instance, rel_name, None)
-            detail_serializer = serializer_cls(instance=detail_obj, data=detail_payload, partial=True)
-            detail_serializer.is_valid(raise_exception=True)
-            detail_serializer.save(property=instance)
+        requested_transaction_type = validated_data.get("transaction_type")
+        if (
+            requested_transaction_type is not None
+            and requested_transaction_type != instance.transaction_type
+        ):
+            raise serializers.ValidationError(
+                {
+                    "transaction_type": (
+                        "تغییر نوع معامله پس از ثبت فایل مجاز نیست. "
+                        "برای تبدیل فروش/اجاره/رهن، فایل جدید ثبت کنید."
+                    )
+                }
+            )
+        amenities = validated_data.pop("property_amenities", None)
+
+        with transaction.atomic():
+            for attr, value in validated_data.items():
+                setattr(instance, attr, value)
+
+            instance.save()
+
+            if amenities is not None:
+                instance.property_amenities.set(amenities)
+            if detail_payload is not None:
+                rel_name, serializer_cls = DETAIL_SERIALIZER_MAP[
+                    instance.transaction_type
+                ]
+                detail_obj = getattr(instance, rel_name, None)
+
+                detail_serializer = serializer_cls(
+                    instance=detail_obj,
+                    data=detail_payload,
+                    partial=True,
+                )
+
+                
+
+                detail_serializer.is_valid(raise_exception=True)
+                detail_serializer.save(property=instance)
+
         return instance
+
 
 
 class RenewalContactResultSerializer(serializers.Serializer):

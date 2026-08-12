@@ -1,6 +1,7 @@
 from django.contrib import admin
 
 from .models import (
+    Amenity,
     ImageAsset,
     MortgageDetail,
     PresaleDetail,
@@ -8,6 +9,12 @@ from .models import (
     RentDetail,
     SaleDetail,
 )
+
+@admin.register(Amenity)
+class AmenityAdmin(admin.ModelAdmin):
+    list_display = ("id", "name")
+    search_fields = ("name",)
+    ordering = ("name",)
 
 
 class ImageInline(admin.TabularInline):

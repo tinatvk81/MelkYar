@@ -1,59 +1,49 @@
 """
-تنظیمات پروژه ملک‌یار (MelkYar) — سامانه مدیریت فایل‌های املاک
-
-نکته‌ی امنیتی مهم: هیچ مقدار حساسی (SECRET_KEY، رمز دیتابیس، ...) نباید
-داخل این فایل هارد‌کد شود. همه از فایل .env (که در .gitignore است و
-هرگز commit نمی‌شود) خوانده می‌شوند. یک نمونه در .env.example هست.
+Django settings for MelkYar project.
+Security Note: No sensitive data (SECRET_KEY, DB passwords) should be hardcoded here.
+They are loaded from the .env file (which must be ignored in git).
 """
 import os
 from datetime import timedelta
 from pathlib import Path
-
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
 
-
 def env_bool(key, default=False):
     return os.environ.get(key, str(default)) == "True"
-
 
 def env_list(key, default=""):
     raw = os.environ.get(key, default)
     return [item.strip() for item in raw.split(",") if item.strip()]
 
-
-# --- امنیت -------------------------------------------------------------
+# --- Security -------------------------------------------------------------
 SECRET_KEY = os.environ.get("SECRET_KEY")
 if not SECRET_KEY:
-    raise RuntimeError(
-        "SECRET_KEY تنظیم نشده. یک مقدار تصادفی در فایل .env بگذارید "
-        "(می‌توانید با: python -c \"import secrets; print(secrets.token_urlsafe(50))\" بسازید)."
-    )
+    raise RuntimeError("SECRET_KEY is not set in the .env file.")
 
-DEBUG = env_bool("DEBUG", default=False)  # پیش‌فرض False؛ فقط در توسعه صراحتاً True کنید
+DEBUG = env_bool("DEBUG", default=False)
 ALLOWED_HOSTS = env_list("ALLOWED_HOSTS", "127.0.0.1,localhost")
 
 if not DEBUG and (not ALLOWED_HOSTS or ALLOWED_HOSTS == ["*"]):
-    raise RuntimeError("در حالت DEBUG=False باید ALLOWED_HOSTS دقیقاً دامنه‌های واقعی را داشته باشد، نه *.")
+    raise RuntimeError("In production (DEBUG=False), ALLOWED_HOSTS must contain valid domains.")
 
-# --- هدرهای امنیتی HTTP (فعال فقط وقتی پشت HTTPS واقعی هستید، یعنی DEBUG=False) ---
+# --- HTTP Security Headers ---
 SECURE_SSL_REDIRECT = not DEBUG
 SESSION_COOKIE_SECURE = not DEBUG
 CSRF_COOKIE_SECURE = not DEBUG
 SESSION_COOKIE_HTTPONLY = True
-CSRF_COOKIE_HTTPONLY = False  # فرانت‌اند React برای هدر CSRF نیاز به خواندنش دارد
+CSRF_COOKIE_HTTPONLY = False  # React needs to read this token
 SECURE_BROWSER_XSS_FILTER = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = "DENY"
-SECURE_HSTS_SECONDS = 0 if DEBUG else 31536000  # ۱ سال، فقط در production
+SECURE_HSTS_SECONDS = 0 if DEBUG else 31536000
 SECURE_HSTS_INCLUDE_SUBDOMAINS = not DEBUG
 SECURE_HSTS_PRELOAD = not DEBUG
-# اگر پشت nginx/Cloudflare با ترمینیشن SSL هستید، این را هم لازم دارید:
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
-# --- اپلیکیشن‌ها ---------------------------------------------------------
+# --- Applications ---------------------------------------------------------
 INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",
@@ -61,21 +51,24 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-    # third-party
+    
+    # Third-party
     "rest_framework",
     "rest_framework_simplejwt",
-    "rest_framework_simplejwt.token_blacklist",  # امکان باطل کردن توکن هنگام خروج/غیرفعال‌سازی
+    "rest_framework_simplejwt.token_blacklist",
     "django_filters",
     "corsheaders",
-    "axes",  # قفل موقت اکانت بعد از چند بار رمز اشتباه (Brute-force protection)
-    # local apps
+    "axes",  # Brute-force protection
+    
+    # Local apps
     "accounts",
     "properties",
 ]
 
 MIDDLEWARE = [
-    "django.middleware.security.SecurityMiddleware",
     "corsheaders.middleware.CorsMiddleware",
+
+    "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.locale.LocaleMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -83,23 +76,24 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    "axes.middleware.AxesMiddleware",  # باید آخرین middleware باشد
+    "axes.middleware.AxesMiddleware",
 ]
 
 AUTHENTICATION_BACKENDS = [
-    "axes.backends.AxesStandaloneBackend",  # اول چک می‌کند اکانت قفل نیست
+    "axes.backends.AxesStandaloneBackend",
     "django.contrib.auth.backends.ModelBackend",
 ]
 
-# --- محدودیت تلاش‌های ورود ناموفق (ضد Brute-force) -----------------------
+# --- Brute-force Protection (django-axes) --------------------------------
 AXES_FAILURE_LIMIT = 5
 AXES_COOLOFF_TIME = timedelta(minutes=30)
-AXES_LOCKOUT_PARAMETERS = ["username"]
+AXES_LOCKOUT_PARAMETERS = ["username", "ip_address"]
 AXES_RESET_ON_SUCCESS = True
 
-# --- CORS: فقط دامنه‌های فرانت‌اند واقعی خودتان را اینجا اضافه کنید ------
+# --- CORS ----------------------------------------------------------------
 CORS_ALLOWED_ORIGINS = env_list("CORS_ALLOWED_ORIGINS", "http://localhost:3000")
 CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_ALL_ORIGINS = True # برای محیط توسعه
 
 ROOT_URLCONF = "melkyar.urls"
 
@@ -121,9 +115,7 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "melkyar.wsgi.application"
 
-# --- پایگاه داده ---------------------------------------------------------
-# اگر DB_ENGINE=postgresql در .env تنظیم شود، به‌جای SQLite از پستگرس با
-# اطلاعات اتصال گرفته‌شده از متغیرهای محیطی استفاده می‌شود (رمز هرگز در کد نیست).
+# --- Database ------------------------------------------------------------
 if os.environ.get("DB_ENGINE") == "postgresql":
     DATABASES = {
         "default": {
@@ -153,8 +145,9 @@ AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
 
-# --- زبان و منطقه (فارسی/تهران) -----------------------------------------
-LANGUAGE_CODE = "fa-ir"
+# --- Internationalization ------------------------------------------------
+# Changed to en-us for English terminal prompts.
+LANGUAGE_CODE = "en-us"
 TIME_ZONE = "Asia/Tehran"
 USE_I18N = True
 USE_TZ = True
@@ -165,7 +158,7 @@ MEDIA_URL = "media/"
 MEDIA_ROOT = BASE_DIR / "media"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-# --- Django REST Framework ------------------------------------------------
+# --- Django REST Framework -----------------------------------------------
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework_simplejwt.authentication.JWTAuthentication",
@@ -180,8 +173,6 @@ REST_FRAMEWORK = {
     ),
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 20,
-    # محدودیت نرخ درخواست، هم برای کاربران ناشناس (مثلاً تلاش‌های ورود) و هم
-    # کاربران وارد‌شده، تا از سوءاستفاده/اسکرپینگ فایل‌ها جلوگیری شود.
     "DEFAULT_THROTTLE_CLASSES": (
         "rest_framework.throttling.AnonRateThrottle",
         "rest_framework.throttling.UserRateThrottle",
@@ -193,8 +184,6 @@ REST_FRAMEWORK = {
 }
 
 SIMPLE_JWT = {
-    # عمر کوتاه‌تر access token + امکان blacklist کردن refresh token هنگام
-    # خروج یا غیرفعال‌سازی اکانت مشاور (با app توکن_blacklist که بالا اضافه شد)
     "ACCESS_TOKEN_LIFETIME": timedelta(hours=2),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
     "ROTATE_REFRESH_TOKENS": True,
@@ -202,11 +191,11 @@ SIMPLE_JWT = {
     "UPDATE_LAST_LOGIN": True,
 }
 
-# --- محدودیت فایل‌های آپلودی (برای گالری تصاویر) --------------------------
-FILE_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024  # 5MB
+# --- File Upload Limits --------------------------------------------------
+FILE_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024
 DATA_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024
 
-# --- لاگ‌گیری (برای ردیابی خطا و تلاش‌های مشکوک در production) -------------
+# --- Logging -------------------------------------------------------------
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,

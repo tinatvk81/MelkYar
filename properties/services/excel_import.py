@@ -1,3 +1,5 @@
+
+
 """
 سرویس Import اکسل — پیاده‌سازی کامل فاز ۲.
 
@@ -14,6 +16,7 @@
      زیاد فایل به‌صورت یک‌جا).
 """
 from datetime import date, datetime
+import jdatetime
 
 import openpyxl
 from django.contrib.auth import get_user_model
@@ -97,16 +100,100 @@ def _to_int(value, field_label, required=False):
         raise RowError(f"«{field_label}» باید یک عدد باشد (مقدار داده‌شده: {value})")
 
 
+PERSIAN_DIGITS = str.maketrans("۰۱۲۳۴۵۶۷۸۹", "0123456789")
+ARABIC_DIGITS = str.maketrans("٠١٢٣٤٥٦٧٨٩", "0123456789")
+
+
+def _normalize_number_text(value):
+    """
+    تبدیل اعداد فارسی و عربی به انگلیسی.
+    مثال:
+        ۱۴۰۴/۰۸/۱۵ -> 1404/08/15
+    """
+    return str(value).translate(PERSIAN_DIGITS).translate(ARABIC_DIGITS)
+
+
+def _parse_jalali_date(value, field_label):
+    """
+    تاریخ شمسی متنی را می‌پذیرد:
+      1404/08/15
+      ۱۴۰۴/۰۸/۱۵
+      1404-08-15
+
+    خروجی: datetime.date میلادی برای ذخیره در دیتابیس.
+    """
+    text = _normalize_number_text(value).strip()
+    text = text.replace("-", "/").replace(".", "/")
+
+    parts = [part.strip() for part in text.split("/") if part.strip()]
+    if len(parts) != 3:
+        raise RowError(
+            f"«{field_label}» باید به فرم تاریخ شمسی "
+            f"«1404/08/15» وارد شود (مقدار داده‌شده: {value})"
+        )
+
+    try:
+        year, month, day = map(int, parts)
+
+        # تاریخ‌های 13xx یا 14xx را شمسی می‌دانیم.
+        if not 1200 <= year <= 1600:
+            raise ValueError
+
+        return jdatetime.date(year, month, day).togregorian()
+
+    except (ValueError, TypeError):
+        raise RowError(
+            f"«{field_label}» تاریخ شمسی معتبر نیست "
+            f"(مقدار داده‌شده: {value})"
+        )
+
+
 def _to_date(value, field_label, required=False):
+    """
+    تاریخ قابل قبول:
+      - سلول Date اکسل: datetime/date میلادی
+      - متن شمسی: 1404/08/15 یا ۱۴۰۴/۰۸/۱۵
+      - متن ISO میلادی: 2026-11-06 (برای سازگاری با فایل‌های قبلی)
+    """
     if value in (None, ""):
         if required:
             raise RowError(f"«{field_label}» نمی‌تواند خالی باشد.")
         return None
+
+    # اگر اکسل یک Date واقعی ساخته باشد، openpyxl datetime/date می‌دهد.
     if isinstance(value, datetime):
         return value.date()
+
     if isinstance(value, date):
         return value
-    raise RowError(f"«{field_label}» باید یک تاریخ معتبر (میلادی) باشد (مقدار داده‌شده: {value})")
+
+    text = _normalize_number_text(value).strip()
+
+    # تاریخ شمسی متنی
+    if "/" in text:
+        return _parse_jalali_date(text, field_label)
+
+    # پشتیبانی از تاریخ شمسی با -
+    if "-" in text:
+        parts = text.split("-")
+        if len(parts) == 3 and len(parts[0]) == 4:
+            try:
+                year = int(parts[0])
+                if 1200 <= year <= 1600:
+                    return _parse_jalali_date(text, field_label)
+            except ValueError:
+                pass
+
+        # برای سازگاری با تاریخ میلادی ISO مثل 2026-08-01
+        try:
+            return datetime.strptime(text, "%Y-%m-%d").date()
+        except ValueError:
+            pass
+
+    raise RowError(
+        f"«{field_label}» باید تاریخ شمسی معتبر مانند «1404/08/15» باشد "
+        f"(مقدار داده‌شده: {value})"
+    )
 
 
 def _map_choice(value, mapping, field_label, required=True):

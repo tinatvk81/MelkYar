@@ -1,28 +1,29 @@
 from datetime import date
-
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import FileExtensionValidator
 from django.db import models
 
-
+# 1. تابع کمکی
 def validate_image_size(image):
     max_mb = 5
     if image.size > max_mb * 1024 * 1024:
         raise ValidationError(f"حجم تصویر نباید بیشتر از {max_mb} مگابایت باشد.")
 
+# 2. مدل Amenity (قبل از Property باشد)
+class Amenity(models.Model):
+    name = models.CharField(max_length=100, unique=True, verbose_name="نام امکانات")
 
+    class Meta:
+        verbose_name = "امکانات رفاهی"
+        verbose_name_plural = "امکانات رفاهی"
+
+    def __str__(self):
+        return self.name
+
+# 3. مدل Property
 class Property(models.Model):
-    """
-    فایل ملکی — رکورد پایه با ستون‌های مشترک همه‌ی انواع معامله (دقیقاً
-    منطبق با شیت‌های اکسل که قبلاً طراحی شد).
-
-    برای هر نوع معامله، جدول تفصیلی جدا (SaleDetail / PresaleDetail /
-    RentDetail / MortgageDetail) با رابطه‌ی OneToOne وصل می‌شود؛ اینطوری هم
-    فیلدهای مشترک تکرار نمی‌شوند و هم فیلدهای اختصاصی هر نوع، تمیز و جدا
-    می‌مانند.
-    """
-
+    # ... کدهای TransactionType و غیره ...
     class TransactionType(models.TextChoices):
         SALE = "SALE", "فروش"
         PRESALE = "PRESALE", "پیش‌خرید"
@@ -49,30 +50,25 @@ class Property(models.Model):
         AGREEMENT = "AGREEMENT", "قولنامه‌ای"
         OTHER = "OTHER", "سایر"
 
-    # --- مالکیت رکورد و دسترسی ------------------------------------------
     owner_agent = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
         related_name="properties",
         verbose_name="مشاور ثبت‌کننده",
-        help_text="مشاور یا مدیری که این فایل را ثبت کرده — کلید اصلی کنترل دسترسی.",
     )
 
-    # --- شناسه و نوع ------------------------------------------------------
     code = models.CharField("کد ملک", max_length=30, unique=True)
     title = models.CharField("عنوان آگهی", max_length=255)
     transaction_type = models.CharField(max_length=10, choices=TransactionType.choices)
     property_kind = models.CharField("نوع ملک", max_length=15, choices=PropertyKind.choices)
     status = models.CharField(max_length=10, choices=FileStatus.choices, default=FileStatus.ACTIVE)
 
-    # --- موقعیت -----------------------------------------------------------
     province = models.CharField("استان", max_length=100)
     city = models.CharField("شهر", max_length=100)
     district = models.CharField("منطقه/محله", max_length=150, blank=True)
     full_address = models.TextField("آدرس کامل", blank=True)
     map_link = models.URLField("لینک موقعیت روی نقشه", blank=True)
 
-    # --- مشخصات فنی --------------------------------------------------------
     area_sqm = models.PositiveIntegerField("متراژ زیربنا (متر)", null=True, blank=True)
     land_area_sqm = models.PositiveIntegerField("متراژ زمین (متر)", null=True, blank=True)
     bedrooms = models.PositiveSmallIntegerField("تعداد اتاق خواب", null=True, blank=True)
@@ -87,27 +83,32 @@ class Property(models.Model):
     parking_count = models.PositiveSmallIntegerField("تعداد پارکینگ", default=0)
     has_storage = models.BooleanField("انباری", default=False)
     has_balcony = models.BooleanField("بالکن", default=False)
+    
+    # فیلد متنی قدیمی (برای اکسل)
     amenities = models.CharField("امکانات رفاهی", max_length=500, blank=True, help_text="با کاما جدا کنید")
+    
+    # فیلد جدید ManyToMany (مدل Amenity الان در بالای فایل تعریف شده و شناخته می‌شود)
+    property_amenities = models.ManyToManyField(
+        Amenity,
+        blank=True,
+        related_name="properties",
+        verbose_name="امکانات رفاهی مرتبط",
+    )
+
     heating_system = models.CharField("سیستم گرمایش", max_length=100, blank=True)
     cooling_system = models.CharField("سیستم سرمایش", max_length=100, blank=True)
     floor_covering = models.CharField("نوع کفپوش", max_length=100, blank=True)
     is_renovated = models.BooleanField("بازسازی شده", default=False)
     unit_condition = models.CharField("وضعیت واحد", max_length=150, blank=True)
 
-    # --- مالک واقعی ملک (نه کاربر سیستم) -----------------------------------
     owner_name = models.CharField("نام مالک", max_length=150, blank=True)
     owner_phone = models.CharField("شماره تماس مالک", max_length=20, blank=True)
     is_exclusive = models.BooleanField("فایل انحصاری", default=False)
 
-    # --- محتوا / یادداشت‌ها -------------------------------------------------
     public_description = models.TextField("توضیحات عمومی (نمایش به مشتری)", blank=True)
     private_note = models.TextField("یادداشت خصوصی مشاور", blank=True)
 
-    # --- یادآوری تمدید (فقط برای اجاره/رهن کاربرد دارد، ولی روی رکورد پایه
-    # نگه می‌داریم تا کوئری فهرست «قراردادهای رو‌به‌اتمام» ساده بماند) ---------
-    renewal_priority_flag = models.BooleanField(
-        "اولویت یک‌ماهه (به‌زودی خالی می‌شود)", default=False
-    )
+    renewal_priority_flag = models.BooleanField("اولویت یک‌ماهه", default=False)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -116,36 +117,68 @@ class Property(models.Model):
         verbose_name = "فایل ملکی"
         verbose_name_plural = "فایل‌های ملکی"
         ordering = ["-updated_at"]
-        indexes = [
-            models.Index(fields=["transaction_type", "status"]),
-            models.Index(fields=["city", "district"]),
-            models.Index(fields=["owner_agent"]),
-        ]
 
     def __str__(self):
         return f"{self.code} - {self.title}"
 
 
+
+class Contract(models.Model):
+    property = models.OneToOneField(
+        Property,
+        on_delete=models.CASCADE,
+        related_name="contract",
+    )
+    contract_start_date = models.DateField(null=True, blank=True)
+    contract_end_date = models.DateField(null=True, blank=True)
+    current_tenant_name = models.CharField(max_length=255, blank=True, default="")
+    current_tenant_phone = models.CharField(max_length=32, blank=True, default="")
+    renewal_status = models.CharField(max_length=32, blank=True, default="UNCLEAR")
+    last_contact_result = models.TextField(blank=True, default="")
+    next_contact_date = models.DateField(null=True, blank=True)
+
+    def __str__(self):
+        return f"Contract for {self.property.code}"
+
+
 class ImageAsset(models.Model):
     """گالری تصاویر برای هر فایل ملکی (چند عکس)."""
 
-    property = models.ForeignKey(Property, on_delete=models.CASCADE, related_name="images")
-    # فقط پسوندهای تصویری واقعی مجاز است + محدودیت حجم، تا کسی فایل اجرایی
-    # را با پسوند جعلی آپلود نکند (یک نکته‌ی امنیتی مهم برای هر آپلود عمومی).
+    property = models.ForeignKey(
+        Property,
+        on_delete=models.CASCADE,
+        related_name="images",
+        verbose_name="ملک"
+    )
     image = models.ImageField(
         upload_to="property_images/",
         validators=[
             FileExtensionValidator(allowed_extensions=["jpg", "jpeg", "png", "webp"]),
             validate_image_size,
         ],
+        verbose_name="تصویر"
     )
-    caption = models.CharField(max_length=150, blank=True)
-    uploaded_at = models.DateTimeField(auto_now_add=True)
+    caption = models.CharField(max_length=150, blank=True, verbose_name="توضیح تصویر")
+    is_primary = models.BooleanField(default=False, verbose_name="تصویر اصلی (کاور)")
+    sort_order = models.PositiveIntegerField(default=0, verbose_name="ترتیب نمایش")
+    uploaded_at = models.DateTimeField(auto_now_add=True, verbose_name="تاریخ آپلود")
 
     class Meta:
+        ordering = ["sort_order", "id"]
         verbose_name = "تصویر فایل"
         verbose_name_plural = "تصاویر فایل‌ها"
 
+    def save(self, *args, **kwargs):
+        # قانون: در هر فایل فقط یک عکس می‌تواند اصلی باشد.
+        if self.is_primary:
+            ImageAsset.objects.filter(
+                property=self.property,
+                is_primary=True
+            ).exclude(id=self.id).update(is_primary=False)
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"Image for {self.property.code} - Order: {self.sort_order}"
 
 # ---------------------------------------------------------------------------
 # جزئیات اختصاصیِ هر نوع معامله
@@ -229,3 +262,7 @@ class MortgageDetail(ContractMixin):
     class Meta:
         verbose_name = "جزئیات رهن کامل"
         verbose_name_plural = "جزئیات رهن کامل"
+
+
+
+

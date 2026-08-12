@@ -1,0 +1,7 @@
+source venv/bin/activate
+#یا برای اجرای همه تست‌ها، همان دستور درست تو است:
+pytest
+
+#برای بکاند
+python manage.py runserver
+# فرانت 
