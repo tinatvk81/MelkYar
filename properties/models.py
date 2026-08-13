@@ -1,14 +1,37 @@
+import uuid
 from datetime import date
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.core.validators import FileExtensionValidator
+from django.core.validators import FileExtensionValidator, RegexValidator
 from django.db import models
+
 
 # 1. تابع کمکی
 def validate_image_size(image):
     max_mb = 5
     if image.size > max_mb * 1024 * 1024:
         raise ValidationError(f"حجم تصویر نباید بیشتر از {max_mb} مگابایت باشد.")
+
+phone_validator = RegexValidator(
+    regex=r'^09\d{9}$',
+    message="شماره موبایل باید با 09 شروع شده و 11 رقم باشد.",
+)
+
+
+class DirectionChoices(models.TextChoices):
+    NORTH = 'NORTH', 'شمالی'
+    SOUTH = 'SOUTH', 'جنوبی'
+    EAST = 'EAST', 'شرقی'
+    WEST = 'WEST', 'غربی'
+    DOUBLESIDED = 'DOUBLESIDED', 'دو کله'
+    NABSH = 'NABSH', 'نبش'
+
+
+class CurrencyChoices(models.TextChoices):
+    IRT = 'IRT', 'تومان'
+    IRR = 'IRR', 'ریال'
+    USD = 'USD', 'دلار'
+
 
 # 2. مدل Amenity (قبل از Property باشد)
 class Amenity(models.Model):
@@ -57,7 +80,8 @@ class Property(models.Model):
         verbose_name="مشاور ثبت‌کننده",
     )
 
-    code = models.CharField("کد ملک", max_length=30, unique=True)
+    code = models.CharField("کد ملک", max_length=30, unique=True, blank=True)
+
     title = models.CharField("عنوان آگهی", max_length=255)
     transaction_type = models.CharField(max_length=10, choices=TransactionType.choices)
     property_kind = models.CharField("نوع ملک", max_length=15, choices=PropertyKind.choices)
@@ -74,9 +98,17 @@ class Property(models.Model):
     bedrooms = models.PositiveSmallIntegerField("تعداد اتاق خواب", null=True, blank=True)
     build_year = models.PositiveSmallIntegerField("سال ساخت", null=True, blank=True)
     total_floors = models.PositiveSmallIntegerField("تعداد کل طبقات ساختمان", null=True, blank=True)
-    unit_floor = models.SmallIntegerField("طبقه واحد", null=True, blank=True)
+    unit_floor = models.PositiveSmallIntegerField("طبقه واحد", null=True, blank=True)
+
     units_per_floor = models.PositiveSmallIntegerField("تعداد واحد در طبقه", null=True, blank=True)
-    direction = models.CharField("جهت ساختمان", max_length=50, blank=True)
+    direction = models.CharField(
+        "جهت ساختمان",
+        max_length=20,
+        choices=DirectionChoices.choices,
+        blank=True,
+        null=True,
+    )
+
     document_type = models.CharField(max_length=15, choices=DocumentType.choices, blank=True)
 
     has_elevator = models.BooleanField("آسانسور", default=False)
@@ -84,6 +116,14 @@ class Property(models.Model):
     has_storage = models.BooleanField("انباری", default=False)
     has_balcony = models.BooleanField("بالکن", default=False)
     
+    postal_code = models.CharField("کد پستی", max_length=10, blank=True, null=True)
+    other_kind_name = models.CharField(
+        "نام نوع ملک (سایر)",
+        max_length=100,
+        blank=True,
+        null=True,
+    )
+
     # فیلد متنی قدیمی (برای اکسل)
     amenities = models.CharField("امکانات رفاهی", max_length=500, blank=True, help_text="با کاما جدا کنید")
     
@@ -102,7 +142,13 @@ class Property(models.Model):
     unit_condition = models.CharField("وضعیت واحد", max_length=150, blank=True)
 
     owner_name = models.CharField("نام مالک", max_length=150, blank=True)
-    owner_phone = models.CharField("شماره تماس مالک", max_length=20, blank=True)
+    owner_phone = models.CharField(
+        "شماره تماس مالک",
+        max_length=11,
+        blank=True,
+        validators=[phone_validator],
+    )
+
     is_exclusive = models.BooleanField("فایل انحصاری", default=False)
 
     public_description = models.TextField("توضیحات عمومی (نمایش به مشتری)", blank=True)
@@ -121,6 +167,10 @@ class Property(models.Model):
     def __str__(self):
         return f"{self.code} - {self.title}"
 
+    def save(self, *args, **kwargs):
+        if not self.code:
+            self.code = f"MY-{uuid.uuid4().hex[:8].upper()}"
+        super().save(*args, **kwargs)
 
 
 class Contract(models.Model):
@@ -195,6 +245,13 @@ class SaleDetail(models.Model):
     payment_terms = models.CharField(max_length=15, choices=PaymentTerms.choices, default=PaymentTerms.CASH)
     down_payment = models.BigIntegerField("مبلغ پیش‌پرداخت", null=True, blank=True)
     is_exchangeable = models.BooleanField("قابل معاوضه", default=False)
+    currency = models.CharField(
+        "واحد پول",
+        max_length=3,
+        choices=CurrencyChoices.choices,
+        default=CurrencyChoices.IRT,
+    )
+
 
     class Meta:
         verbose_name = "جزئیات فروش"
@@ -211,6 +268,12 @@ class PresaleDetail(models.Model):
     amount_remaining = models.BigIntegerField("مبلغ باقی‌مانده", null=True, blank=True)
     installment_terms = models.CharField("شرایط اقساط باقی‌مانده", max_length=255, blank=True)
     contract_number = models.CharField("شماره قرارداد پیش‌فروش", max_length=100, blank=True)
+    currency = models.CharField(
+        "واحد پول",
+        max_length=3,
+        choices=CurrencyChoices.choices,
+        default=CurrencyChoices.IRT,
+    )
 
     class Meta:
         verbose_name = "جزئیات پیش‌خرید"
@@ -228,9 +291,15 @@ class ContractMixin(models.Model):
         RENEWED = "RENEWED", "تمدید نهایی شد"
 
     contract_start_date = models.DateField("تاریخ شروع قرارداد")
+    current_tenant_phone = models.CharField(
+        "شماره تماس مستاجر فعلی",
+        max_length=11,
+        blank=True,
+        validators=[phone_validator],
+    )
+
     contract_end_date = models.DateField("تاریخ پایان قرارداد")
     current_tenant_name = models.CharField("نام مستاجر فعلی", max_length=150, blank=True)
-    current_tenant_phone = models.CharField("شماره تماس مستاجر فعلی", max_length=20, blank=True)
     renewal_status = models.CharField(max_length=20, choices=RenewalStatus.choices, default=RenewalStatus.NOT_CHECKED)
     last_contact_result = models.CharField("نتیجه آخرین تماس", max_length=255, blank=True)
     next_contact_date = models.DateField("تاریخ تماس بعدی", null=True, blank=True)
@@ -249,6 +318,12 @@ class RentDetail(ContractMixin):
     monthly_rent = models.BigIntegerField("مبلغ اجاره ماهانه (تومان)")
     convertible_to_mortgage = models.BooleanField("قابل تبدیل رهن/اجاره", default=False)
     yearly_increase_percent = models.PositiveSmallIntegerField("درصد افزایش سالانه پیشنهادی", null=True, blank=True)
+    currency = models.CharField(
+        "واحد پول",
+        max_length=3,
+        choices=CurrencyChoices.choices,
+        default=CurrencyChoices.IRT,
+    )
 
     class Meta:
         verbose_name = "جزئیات اجاره"
@@ -258,6 +333,13 @@ class RentDetail(ContractMixin):
 class MortgageDetail(ContractMixin):
     property = models.OneToOneField(Property, on_delete=models.CASCADE, related_name="mortgage_detail")
     deposit_amount = models.BigIntegerField("مبلغ رهن کامل (تومان)")
+    currency = models.CharField(
+        "واحد پول",
+        max_length=3,
+        choices=CurrencyChoices.choices,
+        default=CurrencyChoices.IRT,
+    )
+
 
     class Meta:
         verbose_name = "جزئیات رهن کامل"
