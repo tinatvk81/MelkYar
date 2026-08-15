@@ -1,22 +1,14 @@
 from rest_framework import serializers
 from django.db import transaction
 
-from .models import (
-    Amenity,
-    ImageAsset,
-    MortgageDetail,
-    PresaleDetail,
-    Property,
-    RentDetail,
-    SaleDetail,
-)
-
+from .models import Property, SaleDetail, RentDetail, MortgageDetail, PresaleDetail, ImageAsset
 
 
 class ImageAssetSerializer(serializers.ModelSerializer):
     class Meta:
         model = ImageAsset
         fields = ["id", "image", "caption", "uploaded_at"]
+        read_only_fields = ["id", "uploaded_at"]
 
 
 class SaleDetailSerializer(serializers.ModelSerializer):
@@ -54,20 +46,8 @@ DETAIL_SERIALIZER_MAP = {
     Property.TransactionType.MORTGAGE: ("mortgage_detail", MortgageDetailSerializer),
 }
 
-class AmenitySerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Amenity
-        fields = ("id", "name")
-        read_only_fields = ("id",)
-
 
 class PropertySerializer(serializers.ModelSerializer):
-    """
-    سریالایزر اصلی فایل ملکی. فیلد `detail` بسته به `transaction_type`
-    محتوای SaleDetail / PresaleDetail / RentDetail / MortgageDetail را
-    می‌خواند و می‌نویسد — طوری که فرانت‌اند با یک endpoint واحد کار کند.
-    """
-
     detail = serializers.DictField(write_only=True)
     detail_data = serializers.SerializerMethodField(read_only=True)
     owner_agent_name = serializers.CharField(source="owner_agent.get_full_name", read_only=True)
@@ -78,74 +58,98 @@ class PropertySerializer(serializers.ModelSerializer):
         source="property_amenities",
         queryset=Amenity.objects.all(),
         many=True,
-        write_only=True,
         required=False,
+        write_only=True,
     )
 
 
     class Meta:
         model = Property
         fields = [
-            "id", "code", "title", "transaction_type", "property_kind", "status",
-            "province", "city", "district", "full_address", "map_link",
-            "area_sqm", "land_area_sqm", "bedrooms", "build_year",
-            "total_floors", "unit_floor", "units_per_floor", "direction",
-            "document_type", "has_elevator", "parking_count", "has_storage",
-            "has_balcony", "amenities", "heating_system", "cooling_system",
-            "floor_covering", "is_renovated", "unit_condition",
-            "owner_name", "owner_phone", "is_exclusive",
-            "public_description", "private_note", "renewal_priority_flag",
-            "owner_agent", "owner_agent_name", "images",
-            "created_at", "updated_at",
-            "detail", "detail_data",
-            "property_amenities","amenity_ids",
-
+            "id",
+            "code",
+            "title",
+            "transaction_type",
+            "property_kind",
+            "status",
+            "province",
+            "city",
+            "district",
+            "full_address",
+            "map_link",
+            "postal_code",
+            "other_kind_name",
+            "area_sqm",
+            "land_area_sqm",
+            "bedrooms",
+            "build_year",
+            "total_floors",
+            "unit_floor",
+            "units_per_floor",
+            "direction",
+            "document_type",
+            "has_elevator",
+            "parking_count",
+            "has_storage",
+            "has_balcony",
+            "amenities",
+            "heating_system",
+            "cooling_system",
+            "floor_covering",
+            "is_renovated",
+            "unit_condition",
+            "owner_name",
+            "owner_phone",
+            "is_exclusive",
+            "public_description",
+            "private_note",
+            "renewal_priority_flag",
+            "owner_agent",
+            "owner_agent_name",
+            "images",
+            "created_at",
+            "updated_at",
+            "detail",
+            "detail_data",
         ]
         read_only_fields = ["owner_agent", "created_at", "updated_at", "renewal_priority_flag"]
 
     def get_detail_data(self, obj):
-        rel_name, serializer_cls = DETAIL_SERIALIZER_MAP[obj.transaction_type]
+        mapping = DETAIL_SERIALIZER_MAP.get(obj.transaction_type)
+        if not mapping:
+            return None
+        rel_name, serializer_cls = mapping
         detail_obj = getattr(obj, rel_name, None)
         if detail_obj is None:
             return None
         return serializer_cls(detail_obj).data
 
     def validate(self, attrs):
-        # بررسی تغییر نوع معامله در زمان آپدیت
         incoming_type = attrs.get("transaction_type")
         if (
-            self.instance is not None 
-            and incoming_type is not None 
+            self.instance is not None
+            and incoming_type is not None
             and incoming_type != self.instance.transaction_type
         ):
             raise serializers.ValidationError(
                 {"transaction_type": "تغییر نوع معامله پس از ثبت فایل مجاز نیست."}
             )
-
-        # سایر بررسی‌ها (اگر وجود دارد)
         return attrs
-
 
     def create(self, validated_data):
         detail_payload = validated_data.pop("detail")
-        request = self.context["request"]
+        request = self.context.get("request")
+        if request is None or not request.user.is_authenticated:
+            raise serializers.ValidationError("کاربر احراز هویت نشده است.")
 
         validated_data["owner_agent"] = request.user
 
-        rel_name, serializer_cls = DETAIL_SERIALIZER_MAP[
-            validated_data["transaction_type"]
-        ]
-
+        rel_name, serializer_cls = DETAIL_SERIALIZER_MAP[validated_data["transaction_type"]]
         detail_serializer = serializer_cls(data=detail_payload)
         detail_serializer.is_valid(raise_exception=True)
 
-        amenities = validated_data.pop("property_amenities", [])
-
         with transaction.atomic():
-
             property_obj = Property.objects.create(**validated_data)
-            property_obj.property_amenities.set(amenities)
-
             detail_serializer.save(property=property_obj)
 
         return property_obj
@@ -166,20 +170,14 @@ class PropertySerializer(serializers.ModelSerializer):
                     )
                 }
             )
-        amenities = validated_data.pop("property_amenities", None)
 
         with transaction.atomic():
             for attr, value in validated_data.items():
                 setattr(instance, attr, value)
-
             instance.save()
 
-            if amenities is not None:
-                instance.property_amenities.set(amenities)
             if detail_payload is not None:
-                rel_name, serializer_cls = DETAIL_SERIALIZER_MAP[
-                    instance.transaction_type
-                ]
+                rel_name, serializer_cls = DETAIL_SERIALIZER_MAP[instance.transaction_type]
                 detail_obj = getattr(instance, rel_name, None)
 
                 detail_serializer = serializer_cls(
@@ -187,24 +185,22 @@ class PropertySerializer(serializers.ModelSerializer):
                     data=detail_payload,
                     partial=True,
                 )
-
-                
-
                 detail_serializer.is_valid(raise_exception=True)
                 detail_serializer.save(property=instance)
 
         return instance
 
 
-
 class RenewalContactResultSerializer(serializers.Serializer):
     """برای ثبت نتیجه‌ی تماس در ماژول «قراردادهای رو‌به‌اتمام»."""
 
-    renewal_status = serializers.ChoiceField(choices=[
-        ("WANTS_RENEWAL", "تمایل به تمدید"),
-        ("WANTS_TO_LEAVE", "تمایل به تخلیه"),
-        ("UNCLEAR", "نامشخص / تماس مجدد لازم است"),
-        ("RENEWED", "تمدید نهایی شد"),
-    ])
+    renewal_status = serializers.ChoiceField(
+        choices=[
+            ("WANTS_RENEWAL", "تمایل به تمدید"),
+            ("WANTS_TO_LEAVE", "تمایل به تخلیه"),
+            ("UNCLEAR", "نامشخص / تماس مجدد لازم است"),
+            ("RENEWED", "تمدید نهایی شد"),
+        ]
+    )
     last_contact_result = serializers.CharField(required=False, allow_blank=True)
     next_contact_date = serializers.DateField(required=False, allow_null=True)

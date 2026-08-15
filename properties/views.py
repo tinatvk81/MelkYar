@@ -4,46 +4,20 @@ from django.db.models import Q
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters, status, viewsets
 from rest_framework.decorators import action
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework.permissions import IsAuthenticated
 
 from accounts.models import ActivityLog
 from accounts.permissions import IsAdminRole
 
 from .filters import PropertyFilter
-from .models import Amenity, MortgageDetail, Property, RentDetail
-from .serializers import (
-    AmenitySerializer,
-    PropertySerializer,
-    RenewalContactResultSerializer,
-)
+from .models import MortgageDetail, Property, RentDetail
+from .serializers import PropertySerializer, RenewalContactResultSerializer
 from .services.excel_import import import_excel_file
 
 
-
 RENEWAL_WINDOW_DAYS = 30
-
-class AmenityViewSet(viewsets.ModelViewSet):
-    """
-    فهرست امکانات رفاهی.
-
-    همه کاربران لاگین‌شده می‌توانند فهرست امکانات را ببینند.
-    فقط ادمین می‌تواند امکان جدید بسازد، تغییر دهد یا حذف کند.
-    """
-
-    queryset = Amenity.objects.all().order_by("name")
-    serializer_class = AmenitySerializer
-    search_fields = ("name",)
-    ordering_fields = ("id", "name")
-    ordering = ("name",)
-
-    def get_permissions(self):
-        if self.action in ("list", "retrieve"):
-            return [IsAuthenticated()]
-
-        return [IsAdminRole()]
-
 
 
 class PropertyViewSet(viewsets.ModelViewSet):
@@ -79,7 +53,6 @@ class PropertyViewSet(viewsets.ModelViewSet):
 
     ordering = ["-updated_at"]
 
-
     def get_queryset(self):
         qs = Property.objects.select_related(
             "sale_detail",
@@ -93,7 +66,6 @@ class PropertyViewSet(viewsets.ModelViewSet):
             return qs
 
         return qs.filter(owner_agent=self.request.user)
-
 
     def perform_create(self, serializer):
         instance = serializer.save()
@@ -126,7 +98,6 @@ class PropertyViewSet(viewsets.ModelViewSet):
             target_repr=f"حذف فایل: {instance.code} - {instance.title}",
             target_id=instance.id,
         )
-
         instance.delete()
 
 
@@ -162,7 +133,6 @@ class RenewalTrackingViewSet(viewsets.ReadOnlyModelViewSet):
         )
 
         user = self.request.user
-
         if not user.is_admin_role:
             qs = qs.filter(owner_agent=user)
 
@@ -206,8 +176,6 @@ class RenewalTrackingViewSet(viewsets.ReadOnlyModelViewSet):
         )
         detail.save()
 
-        # فایل‌هایی که احتمال تمدید یا تخلیه دارند،
-        # در جستجو می‌توانند با اولویت نمایش داده شوند.
         property_obj.renewal_priority_flag = data["renewal_status"] in (
             "WANTS_RENEWAL",
             "WANTS_TO_LEAVE",
