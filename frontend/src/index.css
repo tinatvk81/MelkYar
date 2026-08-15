@@ -1,106 +1,104 @@
+@import url("https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700&display=swap");
+
 :root {
-  font-family: Arial, sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
+  font-family: Vazirmatn, Tahoma, Arial, sans-serif;
   color: #1f2937;
-  background: #f3f4f6;
-}
-
-* {
-  box-sizing: border-box;
-}
-
-body {
-  margin: 0;
+  background: #f5f7fb;
   direction: rtl;
-  background: #f3f4f6;
+  font-synthesis: none;
 }
 
-button,
-input {
-  font: inherit;
-}
+* { box-sizing: border-box; }
 
-.page-center {
-  min-height: 100vh;
-  display: grid;
-  place-items: center;
-  padding: 24px;
-}
+body { min-width: 320px; min-height: 100vh; margin: 0; }
 
-.container {
-  max-width: 1200px;
+button, input, select { font: inherit; }
+button { cursor: pointer; }
+button:disabled { cursor: not-allowed; opacity: 0.6; }
+
+/* Dashboard Layout */
+.dashboard-page {
+  width: min(1440px, 100%);
   margin: 0 auto;
-  padding: 24px;
-}
-
-.card {
-  background: #fff;
-  border-radius: 8px;
-  padding: 20px;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
-}
-
-.card h1,
-.card h2 {
-  margin-top: 0;
-}
-
-label {
-  display: block;
-  margin-top: 12px;
-  margin-bottom: 6px;
-}
-
-input {
-  width: 100%;
-  padding: 10px 12px;
-  border: 1px solid #d1d5db;
-  border-radius: 8px;
-}
-
-button {
-  margin-top: 16px;
-  padding: 10px 16px;
-  border: none;
-  border-radius: 8px;
-  background: #2563eb;
-  color: white;
-  cursor: pointer;
-}
-
-button:hover {
-  background: #1d4ed8;
-}
-
-.error {
-  margin-top: 12px;
-  color: #b91c1c;
-  background: #fee2e2;
-  padding: 10px 12px;
-  border-radius: 8px;
+  padding: 30px 24px;
 }
 
 .topbar {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 16px;
-  margin-bottom: 20px;
+  margin-bottom: 24px;
 }
 
-.searchbar {
+.layout-with-sidebar {
   display: flex;
-  gap: 12px;
-  margin-bottom: 20px;
+  flex-direction: row-reverse;
+  gap: 24px;
+  align-items: flex-start;
 }
 
-.searchbar input {
-  flex: 1;
+/* Sidebar */
+.filter-sidebar {
+  width: 280px;
+  flex-shrink: 0;
+  background: white;
+  padding: 24px;
+  border-radius: 16px;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
 }
 
-.grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 16px;
+.filter-group { margin-bottom: 16px; }
+.filter-group label { display: block; font-size: 13px; margin-bottom: 6px; font-weight: 600; }
+.filter-group select, .filter-group input {
+  width: 100%;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid #d1d5db;
 }
+
+/* Content */
+.main-content {
+  flex-grow: 1;
+  background: white;
+  padding: 24px;
+  border-radius: 16px;
+  border: 1px solid #e5e7eb;
+}
+
+.listing-toolbar { margin-bottom: 20px; }
+.search-input { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #d1d5db; }
+
+/* Table */
+.table-wrapper { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; min-width: 800px; }
+th, td { padding: 14px; text-align: right; border-bottom: 1px solid #f3f4f6; }
+th { background: #f9fafb; font-size: 13px; color: #4b5563; }
+tbody tr:hover { background: #f0fdf4; cursor: pointer; }
+
+.code-cell { font-family: monospace; font-weight: 700; color: #166534; direction: ltr; }
+
+/* Status Badges */
+.status { padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+.status-ACTIVE { background: #dcfce7; color: #166534; }
+.status-RESERVED { background: #fef3c7; color: #92400e; }
+
+/* Modal */
+.modal-overlay {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; z-index: 1000;
+}
+.modal-content {
+  background: white; width: min(90%, 700px); max-height: 90vh; border-radius: 16px; overflow-y: auto;
+}
+.modal-header { padding: 20px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; }
+.modal-body { padding: 24px; }
+.detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.special-details { background: #f0fdf4; padding: 16px; border-radius: 12px; margin: 20px 0; }
+
+.amenity-badge {
+  display: inline-block; background: #f3f4f6; padding: 4px 12px; border-radius: 999px; margin: 4px; font-size: 13px;
+}
+
+.secondary-button { padding: 8px 16px; border: 1px solid #d1d5db; border-radius: 8px; background: white; }
+.text-button { background: none; border: none; color: #15803d; font-size: 13px; margin-top: 10px; }
