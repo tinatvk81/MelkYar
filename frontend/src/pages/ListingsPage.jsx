@@ -22,6 +22,14 @@ function formatNumber(value) {
   return new Intl.NumberFormat("fa-IR").format(value);
 }
 
+function getImageUrl(path) {
+  if (!path) return "";
+  if (path.startsWith("http://") || path.startsWith("https://")) return path;
+  // فرض بر این است که VITE_API_BASE_URL انتهای آن اسلش ندارد
+  const baseUrl = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8001";
+  return `${baseUrl}${path}`;
+}
+
 export default function ListingsPage() {
   const navigate = useNavigate();
 
@@ -187,6 +195,25 @@ export default function ListingsPage() {
                   ))}
                 </div>
               )}
+              <div className="images-section">
+                <h3>تصاویر ملک</h3>
+                {selectedProperty.images && selectedProperty.images.length > 0 ? (
+                  <div className="images-grid">
+                    {selectedProperty.images.map((img) => (
+                      <figure key={img.id} className="property-image-card">
+                        <img
+                          src={getImageUrl(img.image)}
+                          alt={img.caption || "تصویر ملک"}
+                          className="property-image"
+                        />
+                        {img.caption && <figcaption>{img.caption}</figcaption>}
+                      </figure>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="no-data">تصویری ثبت نشده است.</p>
+                )}
+              </div>
             </div>
           </div>
         </div>
