@@ -5,3 +5,9 @@ pytest
 #برای بکاند
 python manage.py runserver
 # فرانت 
+
+#for run code
+cd frontend
+npm run dev
+
+python manage.py runserver 8001

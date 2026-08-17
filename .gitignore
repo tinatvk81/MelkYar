@@ -1,11 +1,11 @@
 venv/
-.venv/
 __pycache__/
 *.pyc
 db.sqlite3
 .env
-logs/*.log
+node_modules/
+frontend/node_modules/
+dist/
+frontend/dist/
+logs/
 media/
-staticfiles/
-.DS_Store
-*.sqlite3

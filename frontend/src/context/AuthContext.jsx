@@ -29,7 +29,6 @@ export function AuthProvider({ children }) {
 
       localStorage.setItem("access_token", access);
       localStorage.setItem("refresh_token", refresh);
-
       setTokens({ access, refresh });
 
       return response.data;

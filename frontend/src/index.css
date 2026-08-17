@@ -102,3 +102,44 @@ tbody tr:hover { background: #f0fdf4; cursor: pointer; }
 
 .secondary-button { padding: 8px 16px; border: 1px solid #d1d5db; border-radius: 8px; background: white; }
 .text-button { background: none; border: none; color: #15803d; font-size: 13px; margin-top: 10px; }
+.images-section {
+  margin-top: 24px;
+}
+
+.images-section h3 {
+  font-size: 16px;
+  margin-bottom: 12px;
+}
+
+.images-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.property-image-card {
+  margin: 0;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.property-image {
+  width: 100%;
+  height: 160px;
+  object-fit: cover;
+  display: block;
+}
+
+.property-image-card figcaption {
+  padding: 8px 10px;
+  font-size: 13px;
+  color: #4b5563;
+}
+
+.no-data {
+  color: #9ca3af;
+  font-size: 13px;
+  font-style: italic;
+}

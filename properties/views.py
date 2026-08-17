@@ -7,13 +7,13 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from .models import Amenity, MortgageDetail, Property, RentDetail
+from .serializers import AmenitySerializer, PropertySerializer, RenewalContactResultSerializer
 
 from accounts.models import ActivityLog
 from accounts.permissions import IsAdminRole
 
 from .filters import PropertyFilter
-from .models import MortgageDetail, Property, RentDetail
-from .serializers import PropertySerializer, RenewalContactResultSerializer
 from .services.excel_import import import_excel_file
 
 
@@ -99,6 +99,16 @@ class PropertyViewSet(viewsets.ModelViewSet):
             target_id=instance.id,
         )
         instance.delete()
+
+class AmenityViewSet(viewsets.ModelViewSet):
+    queryset = Amenity.objects.all().order_by("name")
+    serializer_class = AmenitySerializer
+
+    def get_permissions(self):
+        if self.action in ("create", "update", "partial_update", "destroy"):
+            return [IsAdminRole()]
+        return [IsAuthenticated()]
+
 
 
 class RenewalTrackingViewSet(viewsets.ReadOnlyModelViewSet):

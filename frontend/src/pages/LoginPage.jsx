@@ -1,65 +1,82 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
+import { login } from "../api/auth";
 
 export default function LoginPage() {
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-  const { login, loading } = useAuth();
   const navigate = useNavigate();
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError("");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+
+    setErrorMessage("");
+    setIsSubmitting(true);
 
     try {
       await login(username, password);
-      navigate("/listings");
-    } catch (err) {
-      const responseData = err.response?.data;
+      navigate("/listings", { replace: true });
+    } catch (error) {
+      const apiMessage =
+        error.response?.data?.detail ||
+        error.response?.data?.message ||
+        "نام کاربری یا رمز عبور صحیح نیست.";
 
-      const detail =
-        responseData?.detail ||
-        responseData?.error ||
-        responseData?.message ||
-        responseData?.non_field_errors?.[0] ||
-        (typeof responseData === "string" ? responseData : null) ||
-        "ورود ناموفق بود";
-
-      setError(detail);
+      setErrorMessage(apiMessage);
+    } finally {
+      setIsSubmitting(false);
     }
-  };
+  }
 
   return (
-    <div className="page-center">
-      <form className="card" onSubmit={handleSubmit}>
-        <h1>ورود به MelkYar</h1>
+    <main className="auth-page">
+      <section className="login-card">
+        <div className="brand">
+          <span className="brand-mark">م</span>
+          <div>
+            <h1>ملک‌یار</h1>
+            <p>سامانه مدیریت فایل‌های ملکی</p>
+          </div>
+        </div>
 
-        <label htmlFor="username">نام کاربری</label>
-        <input
-          id="username"
-          value={username}
-          onChange={(e) => setUsername(e.target.value)}
-          type="text"
-          autoComplete="username"
-        />
+        <h2>ورود به سامانه</h2>
 
-        <label htmlFor="password">رمز عبور</label>
-        <input
-          id="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          type="password"
-          autoComplete="current-password"
-        />
+        <form onSubmit={handleSubmit}>
+          <label htmlFor="username">نام کاربری</label>
+          <input
+            id="username"
+            type="text"
+            value={username}
+            onChange={(event) => setUsername(event.target.value)}
+            autoComplete="username"
+            required
+            autoFocus
+          />
 
-        {error && <div className="error">{error}</div>}
+          <label htmlFor="password">رمز عبور</label>
+          <input
+            id="password"
+            type="password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            autoComplete="current-password"
+            required
+          />
 
-        <button type="submit" disabled={loading}>
-          {loading ? "در حال ورود..." : "ورود"}
-        </button>
-      </form>
-    </div>
+          {errorMessage && (
+            <div className="error-box" role="alert">
+              {errorMessage}
+            </div>
+          )}
+
+          <button type="submit" disabled={isSubmitting}>
+            {isSubmitting ? "در حال ورود…" : "ورود"}
+          </button>
+        </form>
+      </section>
+    </main>
   );
 }

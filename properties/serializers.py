@@ -1,13 +1,21 @@
-from rest_framework import serializers
 from django.db import transaction
+from rest_framework import serializers
 
-from .models import Property, SaleDetail, RentDetail, MortgageDetail, PresaleDetail, ImageAsset
+from .models import Amenity, Property, SaleDetail, RentDetail, MortgageDetail, PresaleDetail, ImageAsset
+
+
+
+class AmenitySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Amenity
+        fields = ["id", "name"]
+        read_only_fields = ["id"]
 
 
 class ImageAssetSerializer(serializers.ModelSerializer):
     class Meta:
         model = ImageAsset
-        fields = ["id", "image", "caption", "uploaded_at"]
+        fields = ["id", "image", "caption", "is_primary", "sort_order", "uploaded_at"]
         read_only_fields = ["id", "uploaded_at"]
 
 
@@ -48,12 +56,11 @@ DETAIL_SERIALIZER_MAP = {
 
 
 class PropertySerializer(serializers.ModelSerializer):
-    detail = serializers.DictField(write_only=True)
+    detail = serializers.DictField(write_only=True, required=False)
     detail_data = serializers.SerializerMethodField(read_only=True)
     owner_agent_name = serializers.CharField(source="owner_agent.get_full_name", read_only=True)
     images = ImageAssetSerializer(many=True, read_only=True)
     property_amenities = AmenitySerializer(many=True, read_only=True)
-
     amenity_ids = serializers.PrimaryKeyRelatedField(
         source="property_amenities",
         queryset=Amenity.objects.all(),
@@ -61,7 +68,6 @@ class PropertySerializer(serializers.ModelSerializer):
         required=False,
         write_only=True,
     )
-
 
     class Meta:
         model = Property
@@ -93,6 +99,8 @@ class PropertySerializer(serializers.ModelSerializer):
             "has_storage",
             "has_balcony",
             "amenities",
+            "property_amenities",
+            "amenity_ids",
             "heating_system",
             "cooling_system",
             "floor_covering",
@@ -137,19 +145,27 @@ class PropertySerializer(serializers.ModelSerializer):
         return attrs
 
     def create(self, validated_data):
-        detail_payload = validated_data.pop("detail")
+        detail_payload = validated_data.pop("detail", None)
         request = self.context.get("request")
         if request is None or not request.user.is_authenticated:
             raise serializers.ValidationError("کاربر احراز هویت نشده است.")
 
         validated_data["owner_agent"] = request.user
 
-        rel_name, serializer_cls = DETAIL_SERIALIZER_MAP[validated_data["transaction_type"]]
-        detail_serializer = serializer_cls(data=detail_payload)
+        if detail_payload is None:
+            raise serializers.ValidationError({"detail": "ارسال detail الزامی است."})
+
+        detail_serializer = DETAIL_SERIALIZER_MAP[validated_data["transaction_type"]][1](
+            data=detail_payload
+        )
         detail_serializer.is_valid(raise_exception=True)
+
+        amenities = validated_data.pop("property_amenities", [])
 
         with transaction.atomic():
             property_obj = Property.objects.create(**validated_data)
+            if amenities:
+                property_obj.property_amenities.set(amenities)
             detail_serializer.save(property=property_obj)
 
         return property_obj
@@ -171,15 +187,19 @@ class PropertySerializer(serializers.ModelSerializer):
                 }
             )
 
+        amenities = validated_data.pop("property_amenities", None)
+
         with transaction.atomic():
             for attr, value in validated_data.items():
                 setattr(instance, attr, value)
             instance.save()
 
+            if amenities is not None:
+                instance.property_amenities.set(amenities)
+
             if detail_payload is not None:
                 rel_name, serializer_cls = DETAIL_SERIALIZER_MAP[instance.transaction_type]
                 detail_obj = getattr(instance, rel_name, None)
-
                 detail_serializer = serializer_cls(
                     instance=detail_obj,
                     data=detail_payload,
@@ -189,6 +209,13 @@ class PropertySerializer(serializers.ModelSerializer):
                 detail_serializer.save(property=instance)
 
         return instance
+
+
+class AmenityCreateUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Amenity
+        fields = ["id", "name"]
+        read_only_fields = ["id"]
 
 
 class RenewalContactResultSerializer(serializers.Serializer):
