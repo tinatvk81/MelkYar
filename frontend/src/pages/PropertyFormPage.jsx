@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { createProperty } from "../api/client";
+import { createProperty } from "../api/properties";
+
 
 // لیست‌های استاندارد برای Dropdownها
 const provinceOptions = ["خراسان رضوی", "تهران", "مازندران", "اصفهان", "فارس"];
@@ -8,7 +9,16 @@ const cityOptions = {
   "خراسان رضوی": ["مشهد", "نیشابور", "سبزوار"],
   "تهران": ["تهران", "ورامین", "شهریار"],
 };
-const directionOptions = ["شمالی", "جنوبی", "شرقی", "غربی", "دو کله", "نبش"];
+const directionOptions = [
+  { value: "NORTH", label: "شمالی" },
+  { value: "SOUTH", label: "جنوبی" },
+  { value: "EAST", label: "شرقی" },
+  { value: "WEST", label: "غربی" },
+  { value: "DOUBLESIDED", label: "دو کله" },
+  { value: "NABSH", label: "نبش" },
+];
+
+
 const paymentTermsOptions = [
   { value: "CASH", label: "نقدی" },
   { value: "EXCHANGE", label: "معاوضه" },
@@ -287,9 +297,8 @@ async function handleSubmit(event) {
     const finalAmenities = [
       ...(form.amenities_list || []),
       form.other_amenities,
-    ]
-      .filter(Boolean)
-      .join("، ");
+    ].filter(Boolean).join("، ");
+
 
     const payload = {
       ...basePayload,

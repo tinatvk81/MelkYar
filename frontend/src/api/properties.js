@@ -1,13 +1,8 @@
-import client from "./client";
 
-export async function getListings(params = {}) {
-  const response = await client.get("/properties/listings/", {
-    params,
-  });
+import api from './client';
 
-  return response.data;
-}
-export async function getPropertyDetail(id) {
-  const response = await client.get(`/properties/listings/${id}/`);
-  return response.data;
-}
+export const getProperties = () => api.get('/properties/');
+export const getPropertyDetail = (id) => api.get(`/properties/${id}/`);
+export const createProperty = (data) => api.post('/properties/', data);
+export const updateProperty = (id, data) => api.put(`/properties/${id}/`, data);
+export const deleteProperty = (id) => api.delete(`/properties/${id}/`);
